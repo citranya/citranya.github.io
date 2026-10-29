@@ -1,398 +1,324 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Air Mouse Controller</title>
-<!-- PeerJS untuk koneksi WebRTC DataChannel (UDP P2P) yang kompatibel penuh dengan HTTPS GitHub Pages -->
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<style>
-  :root {
-    --bg: #0b0d10; --card: #13171d; --border: #222934;
-    --text: #f1f5f9; --muted: #64748b; --accent: #3b82f6;
-    --green: #10b981; --orange: #f59e0b; --purple: #8b5cf6; --teal: #0d9488;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; height: 100dvh; display: flex; flex-direction: column; padding: 12px; gap: 10px; overflow: hidden; }
-  
-  /* Panel Koneksi */
-  .conn-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-  .conn-tabs { display: flex; gap: 6px; align-items: center; justify-content: space-between; }
-  .tab-btn { flex: 1; padding: 6px; font-size: 11px; font-weight: 700; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); }
-  .tab-btn.active { background: #1e293b; color: var(--text); border-color: var(--accent); }
-  .badge { padding: 5px 10px; border-radius: 99px; font-size: 11px; font-weight: 800; background: #334155; }
-  
-  .conn-row { display: flex; gap: 8px; align-items: center; }
-  input[type=text] { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 8px; font-size: 14px; font-weight: 600; outline: none; }
-  .btn-connect { padding: 8px 14px; background: var(--green); color: #fff; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; }
-  
-  /* Bar Sensitivitas */
-  .sens-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); padding: 0 4px; }
-  input[type=range] { flex: 1; accent-color: var(--accent); }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Air Mouse Pro Controller</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    body {
+      margin: 0; padding: 14px; font-family: 'Segoe UI', sans-serif;
+      background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; height: 100vh;
+    }
+    .header {
+      background: #1e293b; padding: 12px 16px; border-radius: 12px; margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; background: #ef4444; }
+    .dot.online { background: #22c55e; }
+    .slider-row { display: flex; align-items: center; gap: 10px; }
+    input[type=range] { flex: 1; accent-color: #3b82f6; }
 
-  /* Area Trackpad 2 Jari & Status */
-  .touch-area { flex: 3; background: var(--card); border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 14px; position: relative; touch-action: none; }
-  .touch-area h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-  .touch-area p { font-size: 12px; color: var(--muted); max-width: 260px; }
+    /* Area Status & Trackpad Dua Jari Opsional */
+    .status-area {
+      flex: 1; background: #1e293b; border: 2px dashed #334155; border-radius: 14px;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      text-align: center; padding: 15px; margin-bottom: 10px; transition: 0.2s;
+    }
+    .state-badge {
+      font-size: 24px; font-weight: bold; padding: 8px 20px; border-radius: 8px;
+      background: #334155; margin-bottom: 8px;
+    }
+    .state-MOVE { background: #2563eb; }
+    .state-SCROLL { background: #d97706; }
+    .state-HOLD { background: #16a34a; }
 
-  /* Tombol Utama: SCROLL & PRIMARY/HOLD */
-  .main-controls { flex: 5; display: flex; gap: 10px; touch-action: none; }
-  .btn-scroll { flex: 4; background: #1e293b; border: 2px solid var(--border); border-radius: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; font-weight: 800; font-size: 16px; text-align: center; transition: 0.1s; }
-  .btn-scroll.active { background: var(--teal); border-color: #2dd4bf; transform: scale(0.98); }
-  
-  .btn-primary { flex: 6; background: var(--accent); border: 2px solid #60a5fa; border-radius: 16px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; font-weight: 800; font-size: 17px; text-align: center; transition: 0.1s; }
-  .btn-primary.holding { background: var(--orange); border-color: #fde047; transform: scale(0.98); }
+    /* Tombol Utama: SCROLL & PRIMARY/HOLD */
+    .main-buttons {
+      display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; height: 180px; margin-bottom: 10px;
+    }
+    .btn {
+      border: none; border-radius: 14px; font-weight: bold; color: white;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      font-size: 18px; cursor: pointer; touch-action: none;
+    }
+    .btn span { font-size: 12px; font-weight: normal; opacity: 0.85; margin-top: 4px; }
+    #btnScroll { background: #475569; }
+    #btnScroll.active { background: #f59e0b; color: #000; }
+    #btnPrimary { background: #2563eb; font-size: 20px; }
+    #btnPrimary.holding { background: #16a34a; }
 
-  /* Baris Bawah */
-  .bottom-controls { height: 52px; display: flex; gap: 10px; }
-  .btn-sub { flex: 1; background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 12px; font-weight: 700; font-size: 13px; }
-  .btn-sub:active { background: #334155; }
-</style>
+    /* Baris Bawah: RIGHT & KALIBRASI/START */
+    .bottom-buttons {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 65px;
+    }
+    #btnRight { background: #334155; font-size: 16px; }
+    #btnStart { background: #10b981; color: #000; font-size: 16px; }
+  </style>
 </head>
 <body>
 
-  <!-- PANEL KONEKSI & METODE TRANSPORT -->
-  <div class="conn-card">
-    <div class="conn-tabs">
-      <button class="tab-btn active" id="tabWebRTC" onclick="switchTransport('webrtc')">WebRTC UDP (Kode Pairing)</button>
-      <button class="tab-btn" id="tabHttp" onclick="switchTransport('http')">Direct Local IP</button>
-      <span class="badge" id="stateBadge">IDLE</span>
+  <div class="header">
+    <div class="status-row">
+      <div><strong>Status:</strong> <span id="connText">Disconnected</span> <span id="connDot" class="dot"></span></div>
+      <div id="fpsInfo">0 Hz</div>
     </div>
-
-    <div class="conn-row">
-      <input type="text" id="targetInput" placeholder="Masukkan 4-Digit Kode Pairing (misal: 4829)">
-      <button class="btn-connect" id="connectBtn" onclick="startAirMouse()">HUBUNGKAN</button>
-    </div>
-
-    <div class="sens-row">
-      <span>Sensitivitas:</span>
-      <input type="range" id="sensSlider" min="0.5" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('sensVal').innerText=this.value+'x'">
-      <strong id="sensVal" style="color:var(--text); min-width:30px;">1.0x</strong>
+    <div class="slider-row">
+      <span>Sensitivity: <strong id="sensVal">1.5x</strong></span>
+      <input type="range" id="sensSlider" min="0.5" max="3.0" step="0.1" value="1.5">
     </div>
   </div>
 
-  <!-- AREA STATUS & TRACKPAD SCROLL 2 JARI -->
-  <div class="touch-area" id="trackpadArea">
-    <h3 id="statusTitle">Sensor IMU Belum Aktif</h3>
-    <p id="statusDesc">Masukkan Kode Pairing yang tampil di Dashboard Laptop lalu tekan HUBUNGKAN.</p>
-  </div>
-
-  <!-- TOMBOL UTAMA: SCROLL (HOLD) & PRIMARY (TAP / HOLD DRAG) -->
-  <div class="main-controls">
-    <div class="btn-scroll" id="scrollBtn">
-      <span>SCROLL</span>
-      <small style="font-size:11px; font-weight:500; opacity:0.85;">Tahan & Miringkan HP</small>
-    </div>
-    <div class="btn-primary" id="primaryBtn">
-      <span id="primaryLabel">PRIMARY / LEFT</span>
-      <small style="font-size:11px; font-weight:500; opacity:0.9;">Tap = Klik • Tahan = Drag</small>
+  <div class="status-area" id="touchpadArea">
+    <div id="stateBadge" class="state-badge state-MOVE">MODE: MOVE</div>
+    <div id="debugText" style="font-family:monospace; font-size:12px; color:#94a3b8;">
+      Tekan tombol "AKTIFKAN SENSOR" di kanan bawah untuk memulai
     </div>
   </div>
 
-  <!-- TOMBOL SEKUNDER: KLIK KANAN & IoT TRIGGER -->
-  <div class="bottom-controls">
-    <button class="btn-sub" onclick="vibrate(15); sendPacket({t:'BTN',b:'RIGHT',a:'CLICK'})">RIGHT CLICK</button>
-    <button class="btn-sub" style="background:#4c1d95; border-color:#7c3aed;" onclick="vibrate(35); sendPacket({t:'IOT',cmd:'TOGGLE_DEVICE'})">TRIGGER IoT (MQTT)</button>
+  <div class="main-buttons">
+    <button class="btn" id="btnScroll">
+      SCROLL
+      <span>(Tahan & Miringkan HP)</span>
+    </button>
+    <button class="btn" id="btnPrimary">
+      PRIMARY / HOLD
+      <span>(Tap = Klik | Tahan >300ms = Drag)</span>
+    </button>
+  </div>
+
+  <div class="bottom-buttons">
+    <button class="btn" id="btnRight">RIGHT CLICK</button>
+    <button class="btn" id="btnStart" onclick="initSensors()">AKTIFKAN SENSOR</button>
   </div>
 
 <script>
-let transportMode = "webrtc"; // 'webrtc' atau 'http'
-let peer = null;
-let rtcConn = null;
-let sensorsActive = false;
+  // Topik komunikasi real-time (bisa diganti sesuai ID unik Anda)
+  const CHANNEL_STREAM = "airmouse_pro/user_01/stream";
+  const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt");
 
-// State Machine & IMU
-let currentMode = "MOVE";
-let currentPitch = 0.0, currentRoll = 0.0;
-let refPitch = 0.0, refRoll = 0.0;
+  // Parameter Sensor Fusion & State Machine sesuai rancangan
+  const ALPHA = 0.98;             // Complementary Filter alpha = 0.98
+  const TAP_THRESHOLD_MS = 250;   // Tap singkat < 250 ms
+  const HOLD_THRESHOLD_MS = 300;  // Hold > 300 ms
+  const MAX_TAP_MOVEMENT = 2.5;   // Anti-accidental click threshold
 
-// Tap vs Hold State
-let holdTimer = null;
-let isHoldingLeft = false;
-let touchDownTime = 0;
-let accumMoveDuringTap = 0.0;
+  let currentState = "MOVE";      // MOVE | SCROLL | HOLD
+  let sensitivity = 1.5;
+  let isSensorActive = false;
 
-// Two-finger scroll state
-let lastTwoFingerX = null, lastTwoFingerY = null;
+  // Data IMU mentah & hasil Sensor Fusion
+  let rawAccel = { x: 0, y: 0, z: 0 };
+  let rawGyro  = { alpha: 0, beta: 0, gamma: 0 }; // deg/s
+  let fusedPitch = 0, fusedRoll = 0;
+  let basePitch = 0, baseRoll = 0; // Titik referensi saat tombol SCROLL mulai ditahan
+  let lastSensorTimestamp = null;
 
-// Baca parameter ?peer=XXXX atau ?ip=XXXX dari QR Code / URL
-window.addEventListener("DOMContentLoaded", () => {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("peer")) {
-    switchTransport("webrtc");
-    document.getElementById("targetInput").value = params.get("peer");
-  } else if (params.get("ip")) {
-    switchTransport("http");
-    document.getElementById("targetInput").value = params.get("ip");
+  // Variabel Anti-Accidental Click & Hold Timer
+  let touchStartTime = 0;
+  let accumulatedMoveDuringTap = 0;
+  let holdTimer = null;
+  let isLeftButtonDown = false;
+
+  // Haptic Feedback Helper
+  function triggerHaptic(ms = 35) {
+    if (navigator.vibrate) navigator.vibrate(ms);
   }
-});
 
-function vibrate(ms) {
-  if (navigator.vibrate) navigator.vibrate(ms);
-}
-
-function setBadge(text, color) {
-  const b = document.getElementById("stateBadge");
-  b.innerText = text;
-  b.style.background = color;
-}
-
-function switchTransport(mode) {
-  transportMode = mode;
-  document.getElementById("tabWebRTC").classList.toggle("active", mode === "webrtc");
-  document.getElementById("tabHttp").classList.toggle("active", mode === "http");
-  const inp = document.getElementById("targetInput");
-  if (mode === "webrtc") {
-    inp.placeholder = "Kode Pairing 4-Digit di Laptop (misal: 4829)";
-  } else {
-    inp.placeholder = "IP Laptop:Port (misal: 192.168.1.10:8000)";
+  function updateUIState(newState) {
+    currentState = newState;
+    const badge = document.getElementById("stateBadge");
+    badge.className = "state-badge state-" + newState;
+    badge.innerText = "MODE: " + newState;
   }
-}
 
-// Fungsi pengiriman paket universal (WebRTC DataChannel UDP atau Direct HTTP)
-function sendPacket(payload) {
-  if (transportMode === "webrtc") {
-    if (rtcConn && rtcConn.open) {
-      rtcConn.send(payload);
-    }
-  } else {
-    const host = document.getElementById("targetInput").value.trim();
-    if (!host) return;
-    const url = host.startsWith("http") ? `${host}/api/pkt` : `http://${host}/api/pkt`;
-    fetch(url, {
-      method: "POST",
-      mode: "cors",
-      body: JSON.stringify(payload),
-      keepalive: true
-    }).catch(() => {});
-  }
-}
+  client.on("connect", () => {
+    document.getElementById("connText").innerText = "Connected";
+    document.getElementById("connDot").classList.add("online");
+  });
 
-async function requestWakeLock() {
-  try {
-    if ("wakeLock" in navigator) {
-      await navigator.wakeLock.request("screen");
-    }
-  } catch (e) {}
-}
-
-async function startAirMouse() {
-  // 1. Minta izin Sensor IMU (Wajib di dalam user gesture untuk iOS Safari & Chrome)
-  if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
-    try {
-      const perm = await DeviceMotionEvent.requestPermission();
-      if (perm !== "granted") {
-        alert("Izin sensor gerak ditolak oleh browser.");
-        return;
-      }
-    } catch (e) {
-      console.error(e);
+  function sendPacket(packet) {
+    if (client.connected) {
+      client.publish(CHANNEL_STREAM, JSON.stringify(packet));
     }
   }
 
-  await requestWakeLock();
-  if (!sensorsActive) {
-    initImuListeners();
-    sensorsActive = true;
-  }
-
-  const target = document.getElementById("targetInput").value.trim();
-  if (!target) {
-    alert("Masukkan Kode Pairing 4-Digit atau IP Laptop terlebih dahulu!");
-    return;
-  }
-
-  if (transportMode === "webrtc") {
-    connectWebRTC(target);
-  } else {
-    setBadge("MOVE (HTTP)", "#10b981");
-    document.getElementById("connectBtn").innerText = "AKTIF";
-    document.getElementById("statusTitle").innerText = "Mode Direct HTTP Aktif";
-    document.getElementById("statusDesc").innerText = "Arahkan HP seperti remote • Geser 2 jari di kotak ini untuk scroll alternatif";
-  }
-}
-
-function connectWebRTC(pairingCode) {
-  setBadge("PAIRING...", "#f59e0b");
-  document.getElementById("statusTitle").innerText = "Menghubungkan WebRTC...";
-  if (peer) peer.destroy();
-
-  peer = new Peer();
-  peer.on("open", () => {
-    // Gunakan serialization 'json' dan reliable: false (mode UDP tanpa head-of-line blocking)
-    rtcConn = peer.connect(`airmouse-laptop-${pairingCode}`, {
-      reliable: false,
-      serialization: "json"
-    });
-
-    rtcConn.on("open", () => {
-      vibrate(40);
-      setBadge("MOVE", "#10b981");
-      document.getElementById("connectBtn").innerText = "TERHUBUNG";
-      document.getElementById("statusTitle").innerText = "Terhubung ke Laptop (WebRTC UDP)";
-      document.getElementById("statusDesc").innerText = "Arahkan HP seperti remote • Geser 2 jari di sini untuk scroll alternatif";
-    });
-
-    rtcConn.on("close", () => {
-      setBadge("PUTUS", "#ef4444");
-      document.getElementById("statusTitle").innerText = "Koneksi Terputus";
-    });
+  // Slider Sensitivitas (0.5x - 3.0x)
+  document.getElementById("sensSlider").addEventListener("input", (e) => {
+    sensitivity = parseFloat(e.target.value);
+    document.getElementById("sensVal").innerText = sensitivity.toFixed(1) + "x";
   });
 
-  peer.on("error", (err) => {
-    setBadge("ERROR", "#ef4444");
-    document.getElementById("statusTitle").innerText = "Gagal Terhubung ke Kode " + pairingCode;
-    document.getElementById("statusDesc").innerText = "Pastikan Dashboard Laptop sedang terbuka di http://localhost:8000";
-  });
-}
-
-function initImuListeners() {
-  // Orientasi absolut/komplementer dari browser untuk referensi sudut Tilt Scroll
-  window.addEventListener("deviceorientation", (e) => {
-    currentPitch = e.beta || 0.0;
-    currentRoll = e.gamma || 0.0;
-  });
-
-  // Kecepatan sudut Giroskop 60 Hz untuk gerak kursor & deteksi jitter
-  window.addEventListener("devicemotion", (e) => {
-    const rot = e.rotationRate;
-    if (!rot) return;
-    const dt = Math.min(Math.max((e.interval || 16.0) / 1000.0, 0.005), 0.05);
-
-    // rot.alpha (Yaw rate) & rot.beta (Pitch rate) dalam derajat/detik
-    const deltaYaw = -(rot.alpha || 0.0) * dt;
-    const deltaPitch = -(rot.beta || 0.0) * dt;
-
-    if (currentMode === "SCROLL") {
-      const pitchDiff = Number((currentPitch - refPitch).toFixed(2));
-      const rollDiff = Number((currentRoll - refRoll).toFixed(2));
-      sendPacket({ t: "SCROLL", pitch: pitchDiff, roll: rollDiff });
-    } else {
-      if (touchDownTime > 0 && !isHoldingLeft) {
-        accumMoveDuringTap += Math.hypot(deltaYaw, deltaPitch);
-      }
-      const sens = parseFloat(document.getElementById("sensSlider").value);
-      sendPacket({
-        t: "MOVE",
-        dx: Number(deltaYaw.toFixed(4)),
-        dy: Number(deltaPitch.toFixed(4)),
-        sens: sens,
-        dt: Number(dt.toFixed(4))
-      });
-    }
-  });
-
-  // Heartbeat setiap 400 ms untuk menjaga Safety Watchdog di Laptop
-  setInterval(() => {
-    sendPacket({ t: "HEARTBEAT", ts: Date.now() });
-  }, 400);
-}
-
-// ============================================================================
-// 1. TOMBOL SCROLL (PRESS-AND-HOLD BERBASIS TILT)
-// ============================================================================
-const scrollBtn = document.getElementById("scrollBtn");
-scrollBtn.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  refPitch = currentPitch;
-  refRoll = currentRoll;
-  currentMode = "SCROLL";
-  scrollBtn.classList.add("active");
-  setBadge("SCROLL", "#0d9488");
-  vibrate(20);
-  sendPacket({ t: "MODE", m: "SCROLL_ON" });
-});
-
-function endScrollMode() {
-  if (currentMode !== "SCROLL") return;
-  currentMode = "MOVE";
-  scrollBtn.classList.remove("active");
-  setBadge("MOVE", "#10b981");
-  vibrate(15);
-  sendPacket({ t: "MODE", m: "SCROLL_OFF" });
-}
-scrollBtn.addEventListener("pointerup", endScrollMode);
-scrollBtn.addEventListener("pointercancel", endScrollMode);
-
-// ============================================================================
-// 2. TOMBOL PRIMARY / LEFT (TAP SINGKAT vs HOLD > 300ms + DRAG)
-// ============================================================================
-const primaryBtn = document.getElementById("primaryBtn");
-const primaryLabel = document.getElementById("primaryLabel");
-
-primaryBtn.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  touchDownTime = Date.now();
-  accumMoveDuringTap = 0.0;
-  isHoldingLeft = false;
-
-  // Beri sinyal awal ke receiver untuk mengaktifkan anti-jitter freeze window
-  sendPacket({ t: "BTN", b: "LEFT", a: "TOUCH_START" });
-
-  clearTimeout(holdTimer);
-  holdTimer = setTimeout(() => {
-    isHoldingLeft = true;
-    currentMode = "DRAG";
-    primaryBtn.classList.add("holding");
-    primaryLabel.innerText = "HOLD / DRAG AKTIF";
-    setBadge("HOLD/DRAG", "#f59e0b");
-    vibrate(45);
-    sendPacket({ t: "BTN", b: "LEFT", a: "DOWN" });
-  }, 300);
-});
-
-function endPrimaryTouch() {
-  clearTimeout(holdTimer);
-  if (touchDownTime === 0) return;
-  const duration = Date.now() - touchDownTime;
-  touchDownTime = 0;
-
-  if (isHoldingLeft) {
-    isHoldingLeft = false;
-    currentMode = "MOVE";
-    primaryBtn.classList.remove("holding");
-    primaryLabel.innerText = "PRIMARY / LEFT";
-    setBadge("MOVE", "#10b981");
-    vibrate(20);
-    sendPacket({ t: "BTN", b: "LEFT", a: "UP" });
-  } else if (duration < 250 && accumMoveDuringTap < 2.0) {
-    vibrate(12);
-    sendPacket({ t: "BTN", b: "LEFT", a: "CLICK" });
-  }
-}
-primaryBtn.addEventListener("pointerup", endPrimaryTouch);
-primaryBtn.addEventListener("pointercancel", endPrimaryTouch);
-
-// ============================================================================
-// 3. ALTERNATIF GESTURE SCROLL 2 JARI DI AREA TENGAH
-// ============================================================================
-const trackpad = document.getElementById("trackpadArea");
-trackpad.addEventListener("touchstart", (e) => {
-  if (e.touches.length === 2) {
-    lastTwoFingerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    lastTwoFingerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-  }
-});
-
-trackpad.addEventListener("touchmove", (e) => {
-  if (e.touches.length === 2 && lastTwoFingerX !== null) {
+  // =====================================================
+  // 1. LOGIKA TOMBOL SCROLL (Press-and-Hold berbasis Tilt)
+  // =====================================================
+  const btnScroll = document.getElementById("btnScroll");
+  btnScroll.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    const curX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    const curY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-    const dx = Math.round((curX - lastTwoFingerX) * 0.25);
-    const dy = Math.round((curY - lastTwoFingerY) * 0.25);
-    if (dx !== 0 || dy !== 0) {
-      sendPacket({ t: "SCROLL", dx: dx, dy: dy });
-      lastTwoFingerX = curX;
-      lastTwoFingerY = curY;
+    triggerHaptic(30);
+    // Kunci orientasi saat ini sebagai titik 0 (tengah) untuk tilt scroll
+    basePitch = fusedPitch;
+    baseRoll  = fusedRoll;
+    btnScroll.classList.add("active");
+    updateUIState("SCROLL");
+    sendPacket({ t: "MODE", m: "SCROLL_ON" });
+  });
+
+  function stopScrollMode() {
+    if (currentState === "SCROLL") {
+      btnScroll.classList.remove("active");
+      updateUIState("MOVE");
+      sendPacket({ t: "MODE", m: "SCROLL_OFF" });
     }
   }
-});
+  btnScroll.addEventListener("pointerup", stopScrollMode);
+  btnScroll.addEventListener("pointercancel", stopScrollMode);
 
-trackpad.addEventListener("touchend", () => {
-  lastTwoFingerX = null;
-  lastTwoFingerY = null;
-});
+  // =====================================================
+  // 2. LOGIKA TOMBOL PRIMARY / HOLD (Tap, Hold >300ms, Drag)
+  // =====================================================
+  const btnPrimary = document.getElementById("btnPrimary");
+  btnPrimary.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    touchStartTime = performance.now();
+    accumulatedMoveDuringTap = 0;
+
+    // Timer untuk mendeteksi Hold > 300 ms
+    holdTimer = setTimeout(() => {
+      isLeftButtonDown = true;
+      btnPrimary.classList.add("holding");
+      updateUIState("HOLD");
+      triggerHaptic([40, 30, 40]); // Getar ganda tanda HOLD/DRAG aktif
+      sendPacket({ t: "BTN", b: "LEFT", a: "DOWN" });
+    }, HOLD_THRESHOLD_MS);
+  });
+
+  function releasePrimaryButton() {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    const duration = performance.now() - touchStartTime;
+
+    if (isLeftButtonDown) {
+      // Akhiri mode HOLD / DRAG -> Kirim MOUSE_UP
+      isLeftButtonDown = false;
+      btnPrimary.classList.remove("holding");
+      updateUIState("MOVE");
+      triggerHaptic(25);
+      sendPacket({ t: "BTN", b: "LEFT", a: "UP" });
+    } else if (duration < TAP_THRESHOLD_MS) {
+      // Anti-accidental click: hanya klik jika tangan tidak sedang mengayun kencang
+      if (accumulatedMoveDuringTap < MAX_TAP_MOVEMENT) {
+        triggerHaptic(20);
+        sendPacket({ t: "BTN", b: "LEFT", a: "CLICK" });
+      }
+    }
+  }
+  btnPrimary.addEventListener("pointerup", releasePrimaryButton);
+  btnPrimary.addEventListener("pointercancel", releasePrimaryButton);
+
+  // =====================================================
+  // 3. TOMBOL KLIK KANAN (Secondary Button)
+  // =====================================================
+  document.getElementById("btnRight").addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    triggerHaptic(30);
+    sendPacket({ t: "BTN", b: "RIGHT", a: "CLICK" });
+  });
+
+  // =====================================================
+  // 4. INISIALISASI IMU & SENSOR FUSION (Complementary Filter)
+  // =====================================================
+  async function initSensors() {
+    if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+      const perm = await DeviceMotionEvent.requestPermission();
+      if (perm !== "granted") return alert("Izin sensor ditolak oleh browser!");
+    }
+
+    window.addEventListener("devicemotion", (e) => {
+      const now = performance.now();
+      const dt = lastSensorTimestamp ? (now - lastSensorTimestamp) / 1000.0 : 0.016;
+      lastSensorTimestamp = now;
+
+      if (e.accelerationIncludingGravity) {
+        rawAccel.x = e.accelerationIncludingGravity.x || 0;
+        rawAccel.y = e.accelerationIncludingGravity.y || 0;
+        rawAccel.z = e.accelerationIncludingGravity.z || 0;
+      }
+      if (e.rotationRate) {
+        // rotationRate dalam derajat/detik (deg/s)
+        rawGyro.alpha = e.rotationRate.alpha || 0; // Pitch rate (Atas-Bawah)
+        rawGyro.beta  = e.rotationRate.beta  || 0; // Roll rate (Miring Kiri-Kanan)
+        rawGyro.gamma = e.rotationRate.gamma || 0; // Yaw rate (Menoleh Kiri-Kanan)
+      }
+
+      // Hitung sudut orientasi dari Accelerometer (dalam derajat)
+      const accelPitch = Math.atan2(rawAccel.y, Math.sqrt(rawAccel.x * rawAccel.x + rawAccel.z * rawAccel.z)) * (180 / Math.PI);
+      const accelRoll  = Math.atan2(-rawAccel.x, rawAccel.z) * (180 / Math.PI);
+
+      // Rumus Complementary Filter sesuai Bab 9:
+      // angle = alpha * (angle + gyro * dt) + (1 - alpha) * accel_angle
+      fusedPitch = ALPHA * (fusedPitch + rawGyro.alpha * dt) + (1 - ALPHA) * accelPitch;
+      fusedRoll  = ALPHA * (fusedRoll  + rawGyro.gamma * dt) + (1 - ALPHA) * accelRoll;
+
+      // Akumulasi pergerakan selama jari menyentuh tombol (untuk Anti-Accidental Click)
+      const instantSpeed = Math.hypot(rawGyro.alpha, rawGyro.gamma) * dt;
+      accumulatedMoveDuringTap += instantSpeed;
+    });
+
+    if (!isSensorActive) {
+      isSensorActive = true;
+      document.getElementById("btnStart").innerText = "RE-CENTER (KALIBRASI)";
+      document.getElementById("fpsInfo").innerText = "50 Hz";
+
+      // Loop pengiriman paket gerak/scroll (50 Hz = setiap 20 ms) & Heartbeat
+      setInterval(() => {
+        if (currentState === "SCROLL") {
+          // Hitung sudut kemiringan (tilt) terhadap titik awal saat SCROLL ditekan
+          const pitchDelta = fusedPitch - basePitch;
+          const rollDelta  = fusedRoll  - baseRoll;
+
+          sendPacket({
+            t: "SCROLL",
+            tiltPitch: Number(pitchDelta.toFixed(2)),
+            tiltRoll:  Number(rollDelta.toFixed(2)),
+            ts: Date.now()
+          });
+          document.getElementById("debugText").innerText =
+            `SCROLL TILT | Vertikal: ${pitchDelta.toFixed(1)}° | Horizontal: ${rollDelta.toFixed(1)}°`;
+        } else {
+          // Mode MOVE atau HOLD/DRAG: kirim kecepatan sudut & orientasi terfusi
+          sendPacket({
+            t: "MOVE",
+            yawRate: Number(rawGyro.gamma.toFixed(2)),
+            pitchRate: Number(rawGyro.alpha.toFixed(2)),
+            rollRate: Number(rawGyro.beta.toFixed(2)),
+            fusedPitch: Number(fusedPitch.toFixed(2)),
+            fusedRoll: Number(fusedRoll.toFixed(2)),
+            sens: sensitivity,
+            hold: isLeftButtonDown,
+            ts: Date.now()
+          });
+          document.getElementById("debugText").innerText =
+            `YawRate: ${rawGyro.gamma.toFixed(1)}°/s | PitchRate: ${rawGyro.alpha.toFixed(1)}°/s\n` +
+            `Fused Pitch: ${fusedPitch.toFixed(1)}° | Roll: ${fusedRoll.toFixed(1)}°`;
+        }
+      }, 20);
+
+      // Heartbeat setiap 500 ms untuk mencegah tombol HOLD nyangkut jika sinyal putus
+      setInterval(() => {
+        sendPacket({ t: "HEARTBEAT", ts: Date.now() });
+      }, 500);
+    } else {
+      // Jika tombol ditekan lagi, lakukan Re-Center orientasi
+      basePitch = fusedPitch;
+      baseRoll  = fusedRoll;
+      triggerHaptic(50);
+    }
+  }
 </script>
 </body>
 </html>
