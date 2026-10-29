@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Air Mouse Everywhere</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-top: 20px; }
+    .card { background: #1e293b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .state-box { font-size: 28px; font-weight: bold; padding: 18px; border-radius: 10px; text-align: center; margin: 12px 0; background: #2563eb; transition: 0.2s; }
+    .state-MOVE { background: #2563eb; color: #fff; }
+    .state-SCROLL { background: #f59e0b; color: #000; }
+    .state-HOLD { background: #a2fbc2; color: #fff; }
+    .metric { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #334155; font-size: 15px; }
+    .event-log { font-family: monospace; background: #0f172a; padding: 12px; border-radius: 8px; height: 110px; overflow-y: auto; font-size: 13px; color: #38bdf8; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h2 style="margin:0;"> Air Mouse Pro: Live Dashboard & State Monitor</h2>
+    <div id="connStatus">Broker MQTT: Menghubungkan...</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3 style="margin-top:0;"> State Machine Saat Ini</h3>
+      <div id="stateBadge" class="state-box state-MOVE">MOVE</div>
+
+      <div class="metric"><span>Status Tombol Kiri:</span> <strong id="leftBtnState">RELEASED (UP)</strong></div>
+      <div class="metric"><span>Sensitivitas Aktif:</span> <strong id="sensDisplay">1.5x</strong></div>
+      <div class="metric"><span>Sudut Tilt (Pitch / Roll):</span> <strong id="tiltDisplay">0.0° / 0.0°</strong></div>
+      <div class="metric"><span>Heartbeat Watchdog:</span> <strong id="hbDisplay" style="color:#22c55e;">AMAN ●</strong></div>
+
+      <h4>Log Event Terakhir</h4>
+      <div class="event-log" id="eventLog">Menunggu paket dari smartphone...</div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;"> Grafik Sensor Fusion & Kecepatan Sudut </h3>
+      <canvas id="fusionChart" height="145"></canvas>
+    </div>
+  </div>
+
+<script>
+  const CHANNEL_STREAM = "airmouse_pro/user_01/stream";
+  const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt");
+
+  let isHolding = false;
+  let currentMode = "MOVE";
+
+  const ctx = document.getElementById('fusionChart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Yaw Rate (°/s - Horizontal)', data: [], borderColor: '#3b82f6', tension: 0.2 },
+        { label: 'Pitch Rate (°/s - Vertikal)', data: [], borderColor: '#ef4444', tension: 0.2 },
+        { label: 'Fused Pitch Angle (°)', data: [], borderColor: '#22c55e', tension: 0.2 }
+      ]
+    },
+    options: { animation: false, scales: { y: { min: -90, max: 90 } } }
+  });
+
+  function addLog(text) {
+    const log = document.getElementById("eventLog");
+    const time = new Date().toLocaleTimeString();
+    log.innerHTML = `[${time}] ${text}<br>` + log.innerHTML;
+  }
+
+  function updateBadge(stateText, cssClass) {
+    const badge = document.getElementById("stateBadge");
+    badge.innerText = stateText;
+    badge.className = "state-box " + cssClass;
+  }
+
+  client.on("connect", () => {
+    document.getElementById("connStatus").innerText = "Broker MQTT: Terhubung (WSS) ";
+    client.subscribe(CHANNEL_STREAM);
+  });
+
+  client.on("message", (topic, message) => {
+    const pkt = JSON.parse(message.toString());
+
+    if (pkt.t === "MODE") {
+      if (pkt.m === "SCROLL_ON") {
+        currentMode = "SCROLL";
+        updateBadge("SCROLL (TILT)", "state-SCROLL");
+        addLog("Mode SCROLL diaktifkan (Tahan tombol)");
+      } else if (pkt.m === "SCROLL_OFF") {
+        currentMode = "MOVE";
+        updateBadge(isHolding ? "DRAG / HOLD" : "MOVE", isHolding ? "state-HOLD" : "state-MOVE");
+        addLog("Mode SCROLL selesai -> Kembali ke MOVE");
+      }
+    }
+    else if (pkt.t === "BTN") {
+      if (pkt.b === "LEFT" && pkt.a === "CLICK") {
+        addLog(" LEFT CLICK (Tap Singkat)");
+      } else if (pkt.b === "LEFT" && pkt.a === "DOWN") {
+        isHolding = true;
+        document.getElementById("leftBtnState").innerText = "PRESSED (HOLD/DRAG) ";
+        updateBadge("PRESSED / DRAG", "state-HOLD");
+        addLog(" HOLD MULAI (MOUSE_DOWN)");
+      } else if (pkt.b === "LEFT" && pkt.a === "UP") {
+        isHolding = false;
+        document.getElementById("leftBtnState").innerText = "RELEASED (UP)";
+        updateBadge("MOVE", "state-MOVE");
+        addLog(" HOLD LEPAS (MOUSE_UP)");
+      } else if (pkt.b === "RIGHT") {
+        addLog(" RIGHT CLICK");
+      }
+    }
+    else if (pkt.t === "SCROLL") {
+      document.getElementById("tiltDisplay").innerText = `${pkt.tiltPitch}° / ${pkt.tiltRoll}°`;
+    }
+    else if (pkt.t === "MOVE") {
+      document.getElementById("sensDisplay").innerText = `${pkt.sens}x`;
+      document.getElementById("tiltDisplay").innerText = `${pkt.fusedPitch}° / ${pkt.fusedRoll}°`;
+      if (isHolding && currentMode === "MOVE") {
+        updateBadge("DRAG (HOLD + MOVE)", "state-HOLD");
+      }
+
+      const now = new Date().toLocaleTimeString();
+      if (chart.data.labels.length > 35) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds => ds.data.shift());
+      }
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(pkt.yawRate);
+      chart.data.datasets[1].data.push(pkt.pitchRate);
+      chart.data.datasets[2].data.push(pkt.fusedPitch);
+      chart.update();
+    }
+    else if (pkt.t === "HEARTBEAT") {
+      const hb = document.getElementById("hbDisplay");
+      hb.innerText = "AKTIF ● (" + new Date(pkt.ts).toLocaleTimeString() + ")";
+    }
+  });
+</script>
+</body>
+</html>

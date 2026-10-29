@@ -12,14 +12,14 @@
       background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; height: 100vh;
     }
     .header {
-      background: #1e293b; padding: 12px 16px; border-radius: 12px; margin-bottom: 10px;
+      background: #2c446b; padding: 12px 16px; border-radius: 12px; margin-bottom: 10px;
       font-size: 14px;
     }
     .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; background: #ef4444; }
-    .dot.online { background: #22c55e; }
+    .dot.online { background: #a1f9c1; }
     .slider-row { display: flex; align-items: center; gap: 10px; }
-    input[type=range] { flex: 1; accent-color: #3b82f6; }
+    input[type=range] { flex: 1; accent-color: #6396e8; }
 
     /* Area Status & Trackpad Dua Jari Opsional */
     .status-area {
@@ -32,8 +32,8 @@
       background: #334155; margin-bottom: 8px;
     }
     .state-MOVE { background: #2563eb; }
-    .state-SCROLL { background: #d97706; }
-    .state-HOLD { background: #16a34a; }
+    .state-SCROLL { background: #fdd547; }
+    .state-HOLD { background: #7bffac; }
 
     /* Tombol Utama: SCROLL & PRIMARY/HOLD */
     .main-buttons {
@@ -271,7 +271,7 @@
 
     if (!isSensorActive) {
       isSensorActive = true;
-      document.getElementById("btnStart").innerText = "RE-CENTER (KALIBRASI)";
+      document.getElementById("btnStart").innerText = "SENSOR AKTIF";
       document.getElementById("fpsInfo").innerText = "50 Hz";
 
       // Loop pengiriman paket gerak/scroll (50 Hz = setiap 20 ms) & Heartbeat
